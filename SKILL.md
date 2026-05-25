@@ -1,132 +1,268 @@
 ---
 name: word-to-excel-lims
-description: Convert Word original-record/LIMS templates (.docx) into stable, editable Excel 2019 .xlsx templates. Use when the user asks to convert Word to Excel, Word原始记录模板转Excel, LIMS原始记录导出模板, preserve visible Word content, redraw borders with Excel cell borders, keep print pages consistent, use equal-width base columns, avoid controls/drawings, and validate XLSX stability.
+description: Convert Word original-record/LIMS templates (.docx) into stable, editable Excel 2019 .xlsx templates using a rules + example-case library + layout_plan.json + deterministic generation scripts + validation gates. Use when the user asks for Word to Excel conversion, Word原始记录模板转Excel, LIMS原始记录导出模板, Excel 2019兼容, 等宽基础列, 打印页数一致, or stable editable xlsx output.
 license: MIT
-compatibility: Agent Skills format. Requires a runtime that can read uploaded DOCX files and create XLSX files. Python 3.10+ recommended; LibreOffice recommended for page-count/render QA.
+compatibility: Agent Skills format. Python 3.10+ recommended. Runtime can operate with an empty examples/ case library.
 metadata:
-  version: "1.0.0"
+  version: "2.0.0"
   language: "zh-CN"
 ---
 
-# Word → Excel LIMS Template Converter
+# Word → Excel LIMS Skill
 
-## Goal
-Convert an uploaded Word original-record template into a stable, editable, printable `.xlsx` template for Excel 2019 and LIMS export use.
+## Purpose
 
-Primary objective: reproduce the **visible business structure** of the Word file in Excel, not Word's hidden layout/control XML. Prioritize workbook stability, editability, print correctness, and page fidelity over pixel-perfect copying.
+This skill converts uploaded Word original-record/LIMS templates into editable, printable, Excel 2019-compatible `.xlsx` templates.
+
+The skill is not a direct Word-format copier. It rebuilds the visible business structure manually in Excel using standard worksheet constructs: cells, fonts, borders, fills, row heights, equal-width base columns, merged ranges, page setup, print areas, and page breaks.
+
+## Non-negotiable output goals
+
+1. Output must be `.xlsx` and compatible with Excel 2019.
+2. Do not use form controls, ActiveX controls, text boxes, drawing shapes, shape lines, images as tables, VML objects, or complex drawing XML.
+3. Convert Word checkbox-like glyphs to plain text `□` unless visible meaning requires another plain character.
+4. Rebuild every visible Word table line, separator, horizontal line, and vertical line with Excel cell borders.
+5. Keep normal Excel gridlines visible. Do not hide sheet gridlines and do not white-fill the whole sheet to simulate a Word page.
+6. Use equal-width base columns for the content area. Never solve layout by selectively widening individual columns.
+7. Use merged cells over equal-width base columns for long labels, values, titles, instruction blocks, tables, and signature areas.
+8. Fixed field labels should normally display on one line. Do not depend on forced line breaks to make labels fit.
+9. Content must be horizontally centered on the print page and should visually occupy about 88%–95% of printable width.
+10. Print preview page count should match the Word source page count whenever the environment can determine it. If the exact count cannot be determined, use best effort and state the limitation.
+11. Prefer file stability over pixel-perfect appearance when Word formatting is unusually complex.
+12. Run validation before delivery. If structural validation finds repair-risk issues, regenerate before returning the file.
+
+## System architecture
+
+This skill has four layers:
+
+```text
+1. Rules
+   SKILL.md and references/*.md define conversion policy and quality gates.
+
+2. Case library
+   examples/case-*/ may contain source.docx, ai-output.xlsx, corrected.xlsx, and notes.md.
+   The case library may be empty. Empty examples must not block conversion.
+
+3. Layout JSON
+   The model or scripts create layout_plan.json, a structured plan describing page setup,
+   base column count, sections, merged ranges, row heights, borders, and print settings.
+
+4. Deterministic scripts
+   scripts/analyze_docx.py extracts visible Word structure.
+   scripts/build_layout_plan.py builds a first-pass layout_plan.json.
+   scripts/generate_xlsx_from_plan.py generates .xlsx from layout_plan.json.
+   scripts/validate_xlsx_structure.py validates XLSX structure and repair-risk signals.
+   scripts/run_conversion.py runs the pipeline end to end.
+```
 
 ## When to use this skill
+
 Use this skill when the user asks to:
-- convert a Word/DOCX original record template to Excel/XLSX;
-- make a LIMS raw-record export template;
-- preserve Word-visible tables, fields, checkboxes, signatures, page numbers, borders, and print layout in Excel;
-- avoid Excel repair warnings, damaged XML, broken merged cells, or Drawing/control objects.
 
-Do not use this skill for data analysis spreadsheets, normal tabular reports, or conversions where the user wants the Word content pasted directly without template reconstruction.
+- convert a Word original-record template to Excel;
+- create an Excel 2019-compatible LIMS export template;
+- preserve Word-visible fields, tables, lines, checkboxes, signature areas, and page structure;
+- improve an existing Word-to-Excel conversion that has broken layout, right-side blank space, repair warnings, unstable merges, or print-page mismatch;
+- use a reference Excel template while keeping the current Word content as the source of truth.
 
-## Core rules
-1. Output must be `.xlsx` compatible with Excel 2019.
-2. Do not use Excel form controls, ActiveX, text boxes, shapes, image-based tables, drawing lines, or nonstandard XML.
-3. Replace Word checkbox controls with plain text `□`.
-4. Recreate visible Word lines and table rules using Excel cell borders only.
-5. Build the workbook as a manual Excel template reconstruction. Do not copy Word's hidden spaces, control characters, section artifacts, or raw layout XML.
-6. Keep worksheet gridlines visible. Do not fill large blank areas white or hide normal Excel gridlines.
-7. Use equal-width base columns plus merged cells. Do not solve width problems by making individual columns wider.
-8. Fixed labels should normally display on one line by merging enough equal-width columns. Do not depend on forced line breaks to preserve the layout.
-9. Excel print preview page count must match the Word print preview page count as closely as the environment allows.
-10. If exact Word fidelity conflicts with XLSX stability, choose XLSX stability first and explain the tradeoff briefly.
+## Required input handling
 
-## Fast execution workflow
+### If the user provides only a Word file
 
-### 1. Inspect inputs
-- Identify the uploaded Word template and any optional reference Excel template.
-- Determine paper size, orientation, margins, headers/footers, visible page count, titles, business sections, tables, signature areas, and page numbering.
-- If LibreOffice or a document renderer is available, render DOCX/PDF/PNG to confirm the visible page count and layout.
-- If only text/table extraction is available, proceed with best effort and state that visual page-count verification was limited.
+1. Analyze the Word file's visible text, paragraphs, tables, fields, checkboxes, and page orientation hints.
+2. Build a first-pass layout plan using this skill's default rules and scripts.
+3. Generate the `.xlsx` file.
+4. Validate the file.
+5. Return the generated `.xlsx` plus a short QA summary.
 
-Helpful script: `scripts/analyze_docx.py <input.docx> --out analysis.json`
+### If the user provides a Word file and a reference Excel file
 
-### 2. Normalize visible content
-- Keep all visible text, table headers, business fields, instructions, placeholders, signatures, and page numbers.
-- Remove illegal XML characters and unstable control characters.
-- Convert checkbox-like controls/symbols to `□` unless already visibly checked and the user asked to preserve checked state.
-- Ignore hidden Word artifacts: hidden paragraph markers, excess tabs, repeated invisible spaces, non-rendered controls, and layout-only XML.
+Use the Word file as the content source. Use the Excel file only as a style and layout reference for page proportions, font sizes, border style, margins, row/column density, and print setup. Do not copy unrelated fields from the reference Excel.
 
-### 3. Choose an equal-width base-column grid
-Choose base columns dynamically from template complexity:
-- Simple form: 16–24 columns.
-- Medium form with several field rows/tables: 24–36 columns.
-- Dense record table or multi-level headers: 36–48 columns.
-- Very dense horizontal layout: 48–64 columns.
+### If the user provides example cases
 
-All base columns in the content area must have the same width. Use merged ranges to represent labels, value fields, long text areas, table cells, and signature blocks. Set print area tightly around actual content, not around empty helper columns.
+Search `examples/case-*` for relevant `notes.md` and `corrected.xlsx`. Prefer the closest case's corrected file as a layout-style reference, but do not copy unrelated business fields. Transfer only reusable layout principles.
 
-Target page fill: the content area should visually occupy about 88%–95% of printable width, centered horizontally, without obvious right-side blank space.
+### If the examples directory is empty
 
-See `references/layout-algorithm.md` for the detailed grid allocation method.
+Continue normally. Use the built-in layout heuristics, `layout_plan.schema.json`, and references. Do not ask the user for examples unless the current Word file is too ambiguous to reconstruct.
 
-### 4. Rebuild Excel layout
-- Create one worksheet unless the Word template clearly requires multiple sheets.
-- Use standard fonts, alignments, row heights, borders, margins, and print settings.
-- Titles, section headers, long notes, and signature fields may span many base columns.
-- Use cell borders for every visible Word table border, horizontal line, vertical line, and separator line.
-- Avoid excessive styling. Use fills only inside real template content areas when visually necessary.
-- Keep row/column gridlines enabled outside the template area.
+## Conversion workflow
 
-### 5. Page setup and print control
-- Match Word paper size, orientation, margins, page headers/footers, and page count where possible.
-- Set horizontal centering on page.
-- Set a tight print area around the actual template content.
-- Use fit-to-page settings carefully: usually fit width to 1 page and control height/page breaks to match the Word page count.
-- If Word has 1 print page, Excel should print as 1 page. If Word has 2 pages, Excel should print as 2 pages, etc.
-- Do not add pages just because content is crowded; first optimize row heights, base columns, merged ranges, font size, and scaling.
-- Do not compress so aggressively that the template becomes unreadable or visually narrow.
+### Step 1 — Extract Word structure
 
-### 6. XLSX stability gate
-Before returning the file, verify:
-- XLSX ZIP opens and all XML parts parse.
-- No `xl/drawings/`, `xl/ctrlProps/`, `xl/activeX/`, or VML controls are present unless explicitly unavoidable and safe.
-- No duplicate, overlapping, crossed, or out-of-bounds merged ranges.
-- No illegal XML characters in strings.
-- No sheet gridline setting disables normal gridlines.
-- Workbook, worksheet, styles, mergeCells, and print settings are structurally valid.
-- Print area does not include large empty right-side space.
+Use `scripts/analyze_docx.py` where possible:
 
-Helpful script: `scripts/validate_xlsx_structure.py <output.xlsx>`
+```bash
+python scripts/analyze_docx.py input.docx --out word_analysis.json
+```
 
-### 7. Visual QA loop
-Render or inspect the final workbook if the environment supports it.
-Check:
-- page count matches Word;
-- content is horizontally centered;
-- template width is visually full but not clipped;
-- borders are continuous and not truncated;
-- all visible text and business fields are present;
-- labels do not rely on manual line breaks;
-- no content is hidden, clipped, overlapped, or split onto unexpected pages.
+The analysis should capture:
 
-If QA fails, patch the workbook and rerun the relevant checks. Limit iterations to focused fixes: column count/width, merge spans, print area, scaling, row heights, borders.
+- visible paragraphs;
+- table count, rows, columns, and cell text;
+- checkbox-like symbols normalized to `□`;
+- estimated complexity signals;
+- page setup hints when available;
+- illegal/control character cleanup needs.
 
-## Output format
+If script extraction is incomplete, use direct document inspection and manual reasoning. Never copy hidden Word control characters into Excel.
+
+### Step 2 — Consult case library, if any
+
+Case folders follow this pattern:
+
+```text
+examples/case-001/
+├── source.docx
+├── ai-output.xlsx
+├── corrected.xlsx
+└── notes.md
+```
+
+`corrected.xlsx` is the target-quality reference. `ai-output.xlsx` is the known imperfect version. `notes.md` explains what changed and why.
+
+If `examples/` contains no case folders, record `case_library.status = "empty"` in the layout plan and proceed.
+
+### Step 3 — Produce layout_plan.json
+
+Before generating Excel, create a layout plan. The plan is the bridge between model reasoning and deterministic workbook generation.
+
+Use the schema in `references/layout_plan.schema.json`. The plan must include:
+
+- schema version;
+- source summary;
+- selected case reference or empty-case status;
+- page setup;
+- base column count;
+- equal column width;
+- sections, rows, cells, merges, borders, row heights;
+- print area and page-fit strategy;
+- QA assumptions and limitations.
+
+Use `scripts/build_layout_plan.py` for a runnable baseline:
+
+```bash
+python scripts/build_layout_plan.py word_analysis.json --examples examples --out layout_plan.json
+```
+
+A human or model may then refine `layout_plan.json` before generation.
+
+### Step 4 — Generate XLSX deterministically
+
+Use `scripts/generate_xlsx_from_plan.py`:
+
+```bash
+python scripts/generate_xlsx_from_plan.py layout_plan.json --out output.xlsx
+```
+
+Generation rules:
+
+- use only worksheet cells and standard Excel styles;
+- keep all base columns equal width;
+- use merged ranges for layout spans;
+- style borders as cell borders only;
+- keep `showGridLines` enabled;
+- avoid drawings, pictures, controls, and text boxes;
+- set page setup, margins, print area, horizontal centering, and fit-to-page settings.
+
+### Step 5 — Validate before delivery
+
+Run:
+
+```bash
+python scripts/validate_xlsx_structure.py output.xlsx --json validation_report.json
+```
+
+The file fails the quality gate if validation reports:
+
+- XML parse errors;
+- drawing/control/media/VML parts;
+- disabled gridlines;
+- duplicate or overlapping merged ranges;
+- malformed merge references;
+- suspicious print settings;
+- workbook or worksheet XML loading errors.
+
+If the file fails, regenerate or simplify before returning.
+
+## Layout strategy
+
+### Equal-width base columns
+
+Choose the base-column count from visible complexity:
+
+| Template complexity | Suggested base columns |
+|---|---:|
+| Very simple fields, no dense table | 16–20 |
+| Normal forms, several field rows | 24–32 |
+| Multi-field rows or normal record tables | 32–40 |
+| Dense tables, many narrow headers, multi-level headers | 40–56 |
+| Highly dense horizontal records | 56–64 |
+
+The exact count must not be fixed globally. Increase the count when right-side blank space is obvious, headers need narrower granularity, or labels cannot survive without forced line breaks.
+
+### Merge strategy
+
+- Title: merge across all base columns.
+- Long instruction block: merge across all or most base columns.
+- Short label: merge 2–4 base columns.
+- Normal label: merge 4–6 base columns.
+- Long label: merge 6–10 base columns.
+- Value area: merge enough remaining columns to keep the total row width full.
+- Dense table column: allocate proportional spans across the base grid.
+
+### Page strategy
+
+- Use A4 portrait unless Word analysis/reference indicates another page size or orientation.
+- Set horizontal centering.
+- Fit width to 1 page by default.
+- Match Word page count if known.
+- Do not solve page count by making content unreadably small.
+- Keep print area tight to actual template content, not empty helper columns.
+
+### Border strategy
+
+- Redraw all visible Word lines using Excel cell borders.
+- Apply outer borders to merged regions and continuous borders to table areas.
+- Do not use drawing lines.
+- Do not rely on underlines alone for Word separator lines.
+
+## Quality gate checklist
+
+Before final answer, verify:
+
+- `.xlsx` opens structurally as a ZIP package;
+- all XML files parse;
+- no `xl/drawings/`, `xl/ctrlProps/`, `xl/activeX/`, `xl/media/`, or VML drawing parts exist;
+- no duplicate/overlapping merged ranges;
+- worksheet gridlines are not disabled;
+- print area is tight;
+- base columns in the content area are equal width;
+- visible content is preserved;
+- labels do not depend on forced line breaks;
+- page is horizontally centered;
+- right-side blank space is not obvious;
+- border lines are continuous;
+- file is editable and printable.
+
+## How to improve the skill over time
+
+When a conversion is unsatisfactory, add a new case:
+
+```text
+examples/case-###/source.docx       original Word file
+examples/case-###/ai-output.xlsx    unsatisfactory AI result
+examples/case-###/corrected.xlsx    human-corrected target result
+examples/case-###/notes.md          what was wrong and how it was corrected
+```
+
+Then update `references/common-corrections.md` if the correction is general. This creates a reusable case library without requiring model fine-tuning.
+
+## Final response format
+
 Return:
-1. A downloadable `.xlsx` file.
-2. A short QA summary including:
-   - Word page count source: renderer / document metadata / best effort.
-   - Excel print page target.
-   - Base-column count and equal-width rule used.
-   - Major stability checks passed.
-   - Any limitations or tradeoffs.
 
-## Common failure fixes
-- **Right blank area too large:** increase base-column count, widen all base columns uniformly, expand merged ranges, and reset print area tightly.
-- **Labels wrap after removing manual breaks:** allocate more merged base columns to label cells; do not widen only one column.
-- **Excel repair warning risk:** remove drawings, controls, VML, malformed styles, conflicting merges, and illegal XML characters.
-- **Borders break:** redraw borders on every cell edge across merged regions; do not use shapes.
-- **Too many pages:** reduce row height, adjust font size moderately, rebalance merged ranges, use fit-to-width, and insert page breaks intentionally.
-- **Unreadably compressed:** increase page count only if Word page count also requires it; otherwise redesign the grid instead of shrinking excessively.
-
-## Repository resources
-- `references/conversion-checklist.md` — concise pass/fail checklist.
-- `references/layout-algorithm.md` — base-column and merge-range strategy.
-- `scripts/analyze_docx.py` — extracts DOCX visible structure signals.
-- `scripts/validate_xlsx_structure.py` — validates XLSX ZIP/XML/merge/drawing-control risks.
+1. the generated `.xlsx` file;
+2. a brief QA summary: validation status, base column count, page setup, whether examples were used, and any limitations;
+3. no long reproduction of the internal layout plan unless the user asks for it.

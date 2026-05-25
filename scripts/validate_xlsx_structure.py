@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Structural safety checker for Excel 2019-compatible XLSX templates.
 
-Checks for XML parse errors, risky drawing/control parts, disabled gridlines,
-and duplicate/overlapping merged ranges. It is a fast structural gate, not a
-replacement for opening the file in Excel and visual print-preview QA.
+Checks XML parse errors, risky drawing/control/media parts, disabled gridlines,
+duplicate/overlapping merged ranges, and basic print settings.
 """
 from __future__ import annotations
 
@@ -60,71 +59,100 @@ def parse_merge_ref(ref: str) -> Rect | None:
     return Rect(ref, a, x, b, y)
 
 
-def validate(path: Path) -> dict:
+def validate_xlsx(path: Path) -> dict:
     result = {
-        "file": str(path),
+        "path": str(path),
         "ok": True,
-        "xml_errors": [],
-        "risky_parts": [],
-        "merge_errors": [],
-        "gridline_warnings": [],
-        "worksheet_count": 0,
+        "errors": [],
+        "warnings": [],
+        "summary": {},
     }
     if not path.exists():
-        return {**result, "ok": False, "xml_errors": ["file not found"]}
+        result["ok"] = False
+        result["errors"].append("File does not exist")
+        return result
+
     try:
         with zipfile.ZipFile(path) as zf:
             names = zf.namelist()
-            for name in names:
-                lower = name.lower()
-                if any(pattern.lower() in lower for pattern in RISKY_PART_PATTERNS):
-                    result["risky_parts"].append(name)
-                if name.endswith(".xml"):
-                    try:
-                        ET.fromstring(zf.read(name))
-                    except ET.ParseError as exc:
-                        result["xml_errors"].append(f"{name}: {exc}")
+            result["summary"]["part_count"] = len(names)
+            risky = [name for name in names for pat in RISKY_PART_PATTERNS if pat in name]
+            if risky:
+                result["ok"] = False
+                result["errors"].append({"risky_parts": sorted(set(risky))})
+
+            xml_names = [n for n in names if n.endswith(".xml")]
+            for name in xml_names:
+                try:
+                    ET.fromstring(zf.read(name))
+                except Exception as exc:
+                    result["ok"] = False
+                    result["errors"].append({"xml_parse_error": name, "message": str(exc)})
+
             sheet_names = [n for n in names if re.match(r"xl/worksheets/sheet\d+\.xml$", n)]
-            result["worksheet_count"] = len(sheet_names)
+            result["summary"]["worksheet_count"] = len(sheet_names)
             for sheet_name in sheet_names:
                 root = ET.fromstring(zf.read(sheet_name))
-                for sv in root.findall(".//main:sheetView", NS):
-                    if sv.attrib.get("showGridLines") == "0":
-                        result["gridline_warnings"].append(f"{sheet_name}: showGridLines=0")
+                sheet_views = root.findall("main:sheetViews/main:sheetView", NS)
+                for view in sheet_views:
+                    if view.attrib.get("showGridLines") == "0":
+                        result["ok"] = False
+                        result["errors"].append({"gridlines_disabled": sheet_name})
+
+                merge_refs = [mc.attrib.get("ref", "") for mc in root.findall(".//main:mergeCell", NS)]
+                seen = set()
                 rects: list[Rect] = []
-                seen: set[str] = set()
-                for mc in root.findall(".//main:mergeCell", NS):
-                    ref = mc.attrib.get("ref", "")
+                malformed = []
+                duplicates = []
+                overlaps = []
+                for ref in merge_refs:
                     if ref in seen:
-                        result["merge_errors"].append(f"{sheet_name}: duplicate merge {ref}")
-                        continue
+                        duplicates.append(ref)
                     seen.add(ref)
                     rect = parse_merge_ref(ref)
                     if rect is None:
-                        result["merge_errors"].append(f"{sheet_name}: invalid merge ref {ref}")
+                        malformed.append(ref)
                         continue
-                    for prev in rects:
-                        if rect.overlaps(prev):
-                            result["merge_errors"].append(f"{sheet_name}: overlapping merges {prev.ref} and {rect.ref}")
+                    for other in rects:
+                        if rect.overlaps(other):
+                            overlaps.append((rect.ref, other.ref))
                     rects.append(rect)
-    except zipfile.BadZipFile as exc:
-        result["xml_errors"].append(f"not a valid XLSX ZIP: {exc}")
+                if malformed:
+                    result["ok"] = False
+                    result["errors"].append({"malformed_merges": sheet_name, "refs": malformed})
+                if duplicates:
+                    result["ok"] = False
+                    result["errors"].append({"duplicate_merges": sheet_name, "refs": duplicates})
+                if overlaps:
+                    result["ok"] = False
+                    result["errors"].append({"overlapping_merges": sheet_name, "refs": overlaps[:20]})
 
-    result["ok"] = not (result["xml_errors"] or result["risky_parts"] or result["merge_errors"] or result["gridline_warnings"])
+                page_setup = root.find("main:pageSetup", NS)
+                if page_setup is None:
+                    result["warnings"].append({"missing_page_setup": sheet_name})
+                print_options = root.find("main:printOptions", NS)
+                if print_options is None or print_options.attrib.get("horizontalCentered") != "1":
+                    result["warnings"].append({"not_horizontally_centered_or_unknown": sheet_name})
+    except zipfile.BadZipFile:
+        result["ok"] = False
+        result["errors"].append("Not a valid XLSX ZIP package")
+    except Exception as exc:
+        result["ok"] = False
+        result["errors"].append(str(exc))
     return result
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Validate XLSX structural safety")
     parser.add_argument("xlsx", type=Path)
-    parser.add_argument("--json", action="store_true", help="Print full JSON result")
-    args = parser.parse_args()
-    data = validate(args.xlsx)
-    if args.json or not data["ok"]:
-        print(json.dumps(data, ensure_ascii=False, indent=2))
-    else:
-        print(f"OK: {args.xlsx} passed structural XLSX checks")
-    return 0 if data["ok"] else 1
+    parser.add_argument("--json", type=Path, default=None)
+    args = parser.parse_args(argv)
+    report = validate_xlsx(args.xlsx)
+    text = json.dumps(report, ensure_ascii=False, indent=2)
+    if args.json:
+        args.json.write_text(text, encoding="utf-8")
+    print(text)
+    return 0 if report["ok"] else 1
 
 
 if __name__ == "__main__":
