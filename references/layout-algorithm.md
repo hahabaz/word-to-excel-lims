@@ -45,3 +45,24 @@ For one-page portrait microbiology original-record templates similar to `case-00
 ## No-fill default
 
 The default visual style is no cell fill. Header hierarchy should be expressed with bold text, alignment, row height, and borders. Use fill colors only when the Word source or the selected `corrected.xlsx` case visibly uses them.
+
+
+## Hidden-row-safe case learning
+
+When using a `corrected.xlsx` as reference, the visible print result is authoritative, not hidden helper rows or hidden columns. If hidden rows/columns exist, record them as warnings and ignore them when estimating target row count, section spacing, and data-entry row counts.
+
+## Multi-level header alignment algorithm
+
+For dense tables with nested headers:
+
+1. List every leaf column in order.
+2. Assign each leaf column to exactly one parent group.
+3. Calculate parent merged ranges from the first to last leaf assigned to that parent.
+4. Only then place visible header text and rowspans.
+5. Validate that standalone columns with vertical merges do not steal columns from adjacent parent groups.
+
+A rendered table where all text appears but parent/child boundaries are shifted is a failed conversion.
+
+## Readable one-page scaling
+
+For one-page Word sources, keep one-page Excel output as the goal. However, if the result becomes visibly much smaller than the Word source or the closest corrected case, rebalance the layout before delivery: remove unnecessary blank rows, reduce excessive row heights, tighten margins, adjust merged spans, and choose a compact base grid. Do not rely on extreme print scaling as the main solution.

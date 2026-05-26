@@ -18,7 +18,41 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def scan_examples(examples_dir: Path) -> dict:
+def analysis_text(analysis: dict) -> str:
+    parts = [str(analysis.get("docx_path", "")), json.dumps(analysis.get("source", {}), ensure_ascii=False)]
+    for block in analysis.get("blocks", []):
+        if block.get("type") == "paragraph":
+            parts.append(str(block.get("text", "")))
+        elif block.get("type") == "table":
+            for row in block.get("rows", []):
+                parts.extend(str(x) for x in row)
+    return "\n".join(parts)
+
+
+def case_score(case: dict, text: str) -> int:
+    hay = text.lower()
+    name = case.get("name", "").lower()
+    notes = case.get("notes_excerpt", "").lower()
+    score = 0
+    for token in re.findall(r"[a-z]\d{3}|cjkj[/_-]?jl[/_-]?w[/_-]?a\d{3}|沙门|志贺|金黄|李斯特|定量|定性", name + "\n" + notes):
+        if token and token in hay:
+            score += 8 if re.match(r"a\d{3}", token) else 3
+    # Strong explicit document-code matches.
+    if "a012" in hay and "a012" in name:
+        score += 50
+    if "a013" in hay and "a013" in name:
+        score += 50
+    # Project-specific semantic hints.
+    if "沙门" in hay and "salmonella" in name:
+        score += 8
+    if "定量" in hay and "quant" in name:
+        score += 8
+    if "定性" in hay and "qual" in name:
+        score += 8
+    return score
+
+
+def scan_examples(examples_dir: Path, analysis: dict | None = None) -> dict:
     if not examples_dir.exists():
         return {"status": "empty", "selected_case": None, "available_cases": [], "notes": "examples directory not found"}
     cases = []
@@ -42,14 +76,24 @@ def scan_examples(examples_dir: Path) -> dict:
         })
     if not cases:
         return {"status": "empty", "selected_case": None, "available_cases": [], "notes": "No real case-* folders. Use default layout heuristics."}
-    # Baseline selector: pick the first complete case. A model can override this.
     complete = [c for c in cases if c["has_corrected"] and c["has_notes"]]
-    selected = complete[0]["name"] if complete else None
+    selected = None
+    selected_score = 0
+    if complete and analysis is not None:
+        text = analysis_text(analysis)
+        scored = [(case_score(c, text), c["name"]) for c in complete]
+        scored.sort(reverse=True)
+        selected_score, selected = scored[0]
+        if selected_score <= 0:
+            selected = complete[0]["name"]
+    elif complete:
+        selected = complete[0]["name"]
     return {
         "status": "used" if selected else "available_not_used",
         "selected_case": selected,
+        "selected_score": selected_score,
         "available_cases": cases,
-        "notes": "Baseline selector used first complete case. Refine manually for semantic similarity if needed.",
+        "notes": "Baseline selector picks the semantically closest complete case when possible. A model can still override after reviewing notes/corrected.xlsx.",
     }
 
 
@@ -181,7 +225,7 @@ def table_section(table: dict, base_columns: int) -> dict:
 
 
 def build_plan(analysis: dict, examples_dir: Path) -> dict:
-    case_library = scan_examples(examples_dir)
+    case_library = scan_examples(examples_dir, analysis)
     base_columns = choose_base_columns(analysis)
     orientation = analysis.get("page_setup", {}).get("orientation", "portrait")
     page_setup = {

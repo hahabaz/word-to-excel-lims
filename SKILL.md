@@ -4,7 +4,7 @@ description: Convert Word original-record/LIMS templates (.doc/.docx) into stabl
 license: MIT
 compatibility: Agent Skills format. Python 3.10+ recommended. Runtime can operate with an empty examples/ case library.
 metadata:
-  version: "2.1.0"
+  version: "2.2.0"
   language: "zh-CN"
 ---
 
@@ -34,8 +34,11 @@ The skill is not a direct Word-format copier. It rebuilds the visible business s
 14. Do not add extra blank data rows below each detected project/table section. Keep row counts tight to the Word source and the closest corrected case.
 15. Use the smallest equal-width base-column grid that can represent the layout cleanly. Avoid 56/64-column grids for portrait one-page forms unless the source is truly extreme and the reference style supports that density.
 16. Avoid copying page-header artifacts, repeated organization names, or OCR/extraction noise into the Excel body. If a corrected case removes those top lines, keep the main business title and form fields only.
-17. Prefer file stability over pixel-perfect appearance when Word formatting is unusually complex.
-18. Run validation before delivery. If structural validation finds repair-risk issues, regenerate before returning the file.
+17. Hidden rows/columns in `corrected.xlsx` are not target content. Treat corrected cases as visible-print references; do not learn hidden helper rows as required output rows, and do not create hidden rows/columns unless explicitly requested.
+18. One-page fitting must preserve readability. Do not solve page-count mismatch by shrinking the whole sheet far below the source Word or corrected Excel visual scale; rebalance columns, merges, row heights, margins, and blank space first.
+19. Multi-level table headers must be validated by parent-child column alignment. Text presence alone is insufficient if leaf columns are under the wrong parent group.
+20. Prefer file stability over pixel-perfect appearance when Word formatting is unusually complex.
+21. Run validation before delivery. If structural validation finds repair-risk issues, regenerate before returning the file.
 
 ## System architecture
 
@@ -89,9 +92,10 @@ Use the Word file as the content source. Use the Excel file only as a style and 
 
 Search `examples/case-*` for relevant `notes.md` and `corrected.xlsx`. Prefer the closest case's corrected file as a layout-style reference, but do not copy unrelated business fields. Transfer only reusable layout principles.
 
-Current seeded case:
+Current seeded cases:
 
-- `examples/case-001-cjjkjl-a012-pathogen/` records the CJJK/JL-W-A012-2024 pathogenic bacteria/microbiology original-record conversion. It teaches: portrait source must remain portrait, one-page Word must stay one-page Excel, no default fills, no extra blank project rows, avoid redundant page-top organization text, and avoid overly dense 56/64-column grids for this A012-style one-page portrait form.
+- `examples/case-001-cjjkjl-a012-pathogen/` records the CJJK/JL-W-A012-2024 pathogenic bacteria/microbiology original-record conversion. It teaches: portrait source must remain portrait, one-page Word must stay one-page Excel, no default fills, no extra blank project rows, avoid redundant page-top organization text, avoid hidden-row/hidden-column traps in corrected examples, and avoid overly dense 56/64-column grids for this A012-style one-page portrait form.
+- `examples/case-002-cjjkjl-a013-salmonella-qual-quant/` records the CJJK/JL-W-A013-2024 Salmonella qualitative + quantitative original-record conversion. It teaches: multi-level table headers must preserve parent-child column alignment, one-page fitting must not make the template visibly too small, and A013 should reuse A012's no-fill/portrait/one-page principles without copying A012's table structure.
 
 ### If the examples directory is empty
 
@@ -229,6 +233,7 @@ The exact count must not be fixed globally. Increase the count when right-side b
 - Fit width to 1 page by default.
 - Match Word page count if known.
 - Do not solve page count by making content unreadably small.
+- For dense one-page forms, compare visual scale against the closest corrected case. A page that technically fits but looks much smaller than the source/reference is still a layout failure.
 - Keep print area tight to actual template content, not empty helper columns.
 
 ### Border strategy

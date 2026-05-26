@@ -1,0 +1,13 @@
+{
+  "version": "2.2.0",
+  "cases": [
+    "case-001-cjjkjl-a012-pathogen",
+    "case-002-cjjkjl-a013-salmonella-qual-quant"
+  ],
+  "updates": [
+    "Replaced A012 corrected.xlsx with latest user-uploaded file",
+    "Added A013 source.doc, ai-output.xlsx, corrected.xlsx, and notes.md",
+    "Added hidden-row/hidden-column caution and validation warnings",
+    "Added A013 header alignment and readable one-page scaling rules"
+  ]
+}

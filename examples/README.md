@@ -22,6 +22,7 @@ examples/case-001/
 Case folders starting with `_` are templates or documentation and are ignored by scripts.
 
 
-## Current included case
+## Current included cases
 
-- `case-001-cjjkjl-a012-pathogen`: A012 食品微生物检验原始记录 case. Includes the original `.doc`, the earlier AI output, the user-made corrected Excel, and notes that capture the six regression rules from the user feedback.
+- `case-001-cjjkjl-a012-pathogen`: A012 食品微生物检验原始记录 case. Includes the original `.doc`, the earlier AI output, the latest user-made corrected Excel, and notes that capture the regression rules from the user feedback, including hidden-row/hidden-column caution.
+- `case-002-cjjkjl-a013-salmonella-qual-quant`: A013 沙门氏菌定性+定量 case. Includes the original `.doc`, the AI output with header-alignment/scaling problems, the user-made corrected Excel, and notes on how to avoid those problems.

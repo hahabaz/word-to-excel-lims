@@ -81,6 +81,7 @@ git push
 
 Zip the folder so that `SKILL.md` is inside the top-level `word-to-excel-lims/` folder, then upload the zip in ChatGPT Skills.
 
-## Included seeded case
+## Included seeded cases
 
-`examples/case-001-cjjkjl-a012-pathogen/` contains this project's first real correction history: the original A012 Word `.doc`, the earlier AI-generated Excel, the user-made corrected Excel, and notes capturing six regression lessons: remove redundant top text, preserve portrait orientation, keep one Word page as one Excel page, remove extra project rows, keep no-fill styling, and avoid overly dense 56/64-column grids.
+- `examples/case-001-cjjkjl-a012-pathogen/` contains the A012 correction history: original Word `.doc`, earlier AI-generated Excel, latest user-made corrected Excel, and notes capturing the regression lessons: remove redundant top text, preserve portrait orientation, keep one Word page as one Excel page, remove extra project rows, keep no-fill styling, avoid overly dense 56/64-column grids, and ignore hidden rows/columns as target structure.
+- `examples/case-002-cjjkjl-a013-salmonella-qual-quant/` contains the A013 correction history: original Word `.doc`, AI-generated Excel with table-header misalignment/scaling issues, user-made corrected Excel, and notes capturing the reusable rules for parent-child header alignment and readable one-page scaling.

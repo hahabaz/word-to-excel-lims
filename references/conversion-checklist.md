@@ -67,3 +67,11 @@ Apply when the current document resembles `examples/case-001-cjjkjl-a012-pathoge
 - [ ] 沙门氏菌、志贺氏菌、金黄色葡萄球菌、单核细胞增生李斯特菌 sections have no AI-added filler rows.
 - [ ] Table headers and body cells have no fill color unless source/reference visibly uses fill.
 - [ ] Base columns are visually compact; avoid 56/64-column grids for this portrait one-page style.
+
+
+## Case-specific regression checks
+
+- If using a corrected case workbook, check for hidden rows/columns and ignore them as target structure unless explicitly requested.
+- For A012-like forms, confirm no redundant page-top organization text, no fill colors, no extra detection-project rows, portrait orientation, and one-page output.
+- For A013-like Salmonella qualitative+quantitative forms, confirm multi-level header parent-child alignment before delivery.
+- Confirm one-page fitting did not make the page visually much smaller than the source Word or closest corrected Excel.
