@@ -47,8 +47,12 @@ def apply_style(cell, spec: dict) -> None:
     horizontal = {"left": "left", "center": "center", "right": "right"}.get(align, "left")
     cell.alignment = Alignment(horizontal=horizontal, vertical=vertical, wrap_text=bool(spec.get("wrap", True)))
     cell.border = border_for(spec.get("border", "box"))
-    if style == "table_header":
-        cell.fill = PatternFill(fill_type="solid", fgColor="F2F2F2")
+    fill_color = spec.get("fill_color")
+    # Default is intentionally no fill. Some LIMS templates, including the
+    # seeded A012 case, should remain completely unfilled; use fills only when
+    # layout_plan.json explicitly requests one based on source/reference files.
+    if fill_color:
+        cell.fill = PatternFill(fill_type="solid", fgColor=str(fill_color).replace("#", ""))
 
 
 def style_merged_border(ws, row: int, col: int, rowspan: int, colspan: int, kind: str) -> None:

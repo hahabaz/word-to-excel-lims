@@ -2,7 +2,7 @@
 
 ## 原始文件
 
-- `source.docx`: 原始 Word 模板
+- `source.doc` / `source.docx`: 原始 Word 模板
 - `ai-output.xlsx`: AI 初版转换结果
 - `corrected.xlsx`: 人工修正后的满意版本
 

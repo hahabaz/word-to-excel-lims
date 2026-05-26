@@ -19,7 +19,7 @@ Use this as the final gate before delivery.
 ## Layout
 
 - [ ] Content is rebuilt manually in Excel.
-- [ ] Content area uses equal-width base columns.
+- [ ] Content area uses equal-width base columns, using the smallest clean grid rather than defaulting to 56/64 columns.
 - [ ] Individual columns are not widened selectively.
 - [ ] Long fields and labels use merged equal-width columns.
 - [ ] Fixed labels do not depend on forced line breaks.
@@ -28,7 +28,7 @@ Use this as the final gate before delivery.
 
 ## Page and print
 
-- [ ] Word print-preview page count is identified or best-effort estimated.
+- [ ] Word print-preview page count is identified or best-effort estimated; if Word is 1 page, Excel is verified/fit to 1 page.
 - [ ] Excel print-preview page count matches the Word page count where environment permits.
 - [ ] Paper size, orientation, margins, centering, print area, and page breaks are set.
 - [ ] Print area tightly covers actual template content.
@@ -55,3 +55,15 @@ Use this as the final gate before delivery.
 - [ ] Return the `.xlsx` file.
 - [ ] Include a short QA summary.
 - [ ] State any limitation honestly.
+
+
+## A012 / seeded-case regression checks
+
+Apply when the current document resembles `examples/case-001-cjjkjl-a012-pathogen`:
+
+- [ ] Source `.doc`/`.docx` portrait orientation is preserved as Excel portrait.
+- [ ] Word 1-page template does not become 2 Excel print pages.
+- [ ] Page-top redundant organization/header text is not duplicated in the worksheet body when the corrected case omits it.
+- [ ] 沙门氏菌、志贺氏菌、金黄色葡萄球菌、单核细胞增生李斯特菌 sections have no AI-added filler rows.
+- [ ] Table headers and body cells have no fill color unless source/reference visibly uses fill.
+- [ ] Base columns are visually compact; avoid 56/64-column grids for this portrait one-page style.

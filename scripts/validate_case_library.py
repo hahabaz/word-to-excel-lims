@@ -17,14 +17,19 @@ def validate(examples: Path) -> dict:
             continue
         if not p.name.startswith("case-"):
             continue
+        has_source_doc = (p / "source.doc").exists()
+        has_source_docx = (p / "source.docx").exists()
         case = {
             "name": p.name,
-            "source_docx": (p / "source.docx").exists(),
+            "source_doc_or_docx": has_source_doc or has_source_docx,
+            "source_doc": has_source_doc,
+            "source_docx": has_source_docx,
             "ai_output_xlsx": (p / "ai-output.xlsx").exists(),
             "corrected_xlsx": (p / "corrected.xlsx").exists(),
             "notes_md": (p / "notes.md").exists(),
         }
-        missing = [k for k, ok in case.items() if k != "name" and not ok]
+        required_keys = ["source_doc_or_docx", "ai_output_xlsx", "corrected_xlsx", "notes_md"]
+        missing = [k for k in required_keys if not case.get(k)]
         if missing:
             report["warnings"].append({p.name: {"missing": missing}})
         report["cases"].append(case)

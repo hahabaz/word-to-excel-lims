@@ -28,13 +28,17 @@ def scan_examples(examples_dir: Path) -> dict:
         if not p.name.startswith("case-"):
             continue
         notes_path = p / "notes.md"
+        source_doc = (p / "source.doc").exists()
+        source_docx = (p / "source.docx").exists()
         cases.append({
             "name": p.name,
-            "has_source_docx": (p / "source.docx").exists(),
+            "has_source_doc": source_doc,
+            "has_source_docx": source_docx,
+            "has_source": source_doc or source_docx,
             "has_ai_output": (p / "ai-output.xlsx").exists(),
             "has_corrected": (p / "corrected.xlsx").exists(),
             "has_notes": notes_path.exists(),
-            "notes_excerpt": notes_path.read_text(encoding="utf-8")[:600] if notes_path.exists() else "",
+            "notes_excerpt": notes_path.read_text(encoding="utf-8")[:900] if notes_path.exists() else "",
         })
     if not cases:
         return {"status": "empty", "selected_case": None, "available_cases": [], "notes": "No real case-* folders. Use default layout heuristics."}
@@ -50,18 +54,39 @@ def scan_examples(examples_dir: Path) -> dict:
 
 
 def choose_base_columns(analysis: dict) -> int:
+    """Choose the smallest clean equal-width grid.
+
+    Earlier versions escalated to 56/64 columns too quickly. That made portrait
+    one-page LIMS forms visually noisy and harder to keep to one print page.
+    Use high column counts only when the source is truly extreme or a selected
+    corrected case proves that density is desirable.
+    """
     max_cols = int(analysis.get("max_table_columns") or 0)
     total_cells = int(analysis.get("total_table_cells") or 0)
     field_like = int(analysis.get("field_like_paragraphs") or 0)
     complexity = analysis.get("complexity", "low")
-    if max_cols >= 14 or total_cells >= 180:
+    orientation = analysis.get("page_setup", {}).get("orientation", "portrait")
+    estimated_pages = analysis.get("estimated_word_pages")
+
+    # A012-style compact path: one-page portrait forms should not default to
+    # 56/64 columns merely because a multi-level header has many leaf columns.
+    if orientation == "portrait" and (estimated_pages in (None, 1)):
+        if max_cols >= 18 or total_cells >= 260:
+            return 40
+        if max_cols >= 10 or total_cells >= 120 or complexity in {"medium", "high"}:
+            return 32
+        if field_like >= 5:
+            return 28
+        return 24
+
+    if max_cols >= 20 or total_cells >= 320:
         return 56
-    if max_cols >= 10 or total_cells >= 120:
-        return 48
-    if max_cols >= 8 or complexity == "high":
+    if max_cols >= 14 or total_cells >= 200:
         return 40
-    if max_cols >= 6 or field_like >= 10 or complexity == "medium":
+    if max_cols >= 10 or total_cells >= 120 or complexity == "high":
         return 32
+    if max_cols >= 6 or field_like >= 10 or complexity == "medium":
+        return 28
     if field_like >= 5:
         return 24
     return 20
@@ -164,7 +189,7 @@ def build_plan(analysis: dict, examples_dir: Path) -> dict:
         "orientation": orientation,
         "horizontal_centered": True,
         "fit_to_width": 1,
-        "fit_to_height": None,
+        "fit_to_height": 1 if analysis.get("estimated_word_pages") == 1 else None,
         "margins": {"left": 0.35, "right": 0.35, "top": 0.45, "bottom": 0.45, "header": 0.2, "footer": 0.2},
         "print_area": None,
     }

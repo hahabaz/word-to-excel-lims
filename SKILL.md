@@ -1,10 +1,10 @@
 ---
 name: word-to-excel-lims
-description: Convert Word original-record/LIMS templates (.docx) into stable, editable Excel 2019 .xlsx templates using a rules + example-case library + layout_plan.json + deterministic generation scripts + validation gates. Use when the user asks for Word to Excel conversion, Word原始记录模板转Excel, LIMS原始记录导出模板, Excel 2019兼容, 等宽基础列, 打印页数一致, or stable editable xlsx output.
+description: Convert Word original-record/LIMS templates (.doc/.docx) into stable, editable Excel 2019 .xlsx templates using a rules + example-case library + layout_plan.json + deterministic generation scripts + validation gates. Use when the user asks for Word to Excel conversion, Word原始记录模板转Excel, LIMS原始记录导出模板, Excel 2019兼容, 等宽基础列, 打印页数一致, or stable editable xlsx output.
 license: MIT
 compatibility: Agent Skills format. Python 3.10+ recommended. Runtime can operate with an empty examples/ case library.
 metadata:
-  version: "2.0.0"
+  version: "2.1.0"
   language: "zh-CN"
 ---
 
@@ -12,24 +12,30 @@ metadata:
 
 ## Purpose
 
-This skill converts uploaded Word original-record/LIMS templates into editable, printable, Excel 2019-compatible `.xlsx` templates.
+This skill converts uploaded Word original-record/LIMS templates (`.doc` or `.docx`) into editable, printable, Excel 2019-compatible `.xlsx` templates.
 
 The skill is not a direct Word-format copier. It rebuilds the visible business structure manually in Excel using standard worksheet constructs: cells, fonts, borders, fills, row heights, equal-width base columns, merged ranges, page setup, print areas, and page breaks.
 
 ## Non-negotiable output goals
 
 1. Output must be `.xlsx` and compatible with Excel 2019.
-2. Do not use form controls, ActiveX controls, text boxes, drawing shapes, shape lines, images as tables, VML objects, or complex drawing XML.
-3. Convert Word checkbox-like glyphs to plain text `□` unless visible meaning requires another plain character.
-4. Rebuild every visible Word table line, separator, horizontal line, and vertical line with Excel cell borders.
-5. Keep normal Excel gridlines visible. Do not hide sheet gridlines and do not white-fill the whole sheet to simulate a Word page.
-6. Use equal-width base columns for the content area. Never solve layout by selectively widening individual columns.
-7. Use merged cells over equal-width base columns for long labels, values, titles, instruction blocks, tables, and signature areas.
-8. Fixed field labels should normally display on one line. Do not depend on forced line breaks to make labels fit.
-9. Content must be horizontally centered on the print page and should visually occupy about 88%–95% of printable width.
-10. Print preview page count should match the Word source page count whenever the environment can determine it. If the exact count cannot be determined, use best effort and state the limitation.
-11. Prefer file stability over pixel-perfect appearance when Word formatting is unusually complex.
-12. Run validation before delivery. If structural validation finds repair-risk issues, regenerate before returning the file.
+2. Accept `.doc` and `.docx` Word inputs. For old `.doc`, convert to `.docx` first when the runtime supports LibreOffice/headless conversion, then continue with the normal analysis pipeline.
+3. Do not use form controls, ActiveX controls, text boxes, drawing shapes, shape lines, images as tables, VML objects, or complex drawing XML.
+4. Convert Word checkbox-like glyphs to plain text `□` unless visible meaning requires another plain character.
+5. Rebuild every visible Word table line, separator, horizontal line, and vertical line with Excel cell borders.
+6. Keep normal Excel gridlines visible. Do not hide sheet gridlines and do not white-fill the whole sheet to simulate a Word page.
+7. Use equal-width base columns for the content area. Never solve layout by selectively widening individual columns.
+8. Use merged cells over equal-width base columns for long labels, values, titles, instruction blocks, tables, and signature areas.
+9. Fixed field labels should normally display on one line. Do not depend on forced line breaks to make labels fit.
+10. Content must be horizontally centered on the print page and should visually occupy about 88%–95% of printable width.
+11. Print preview page count must match the Word source page count whenever the environment can determine it. For one-page Word templates, avoid a second Excel print page by tightening print area, row heights, section spacing, and fit settings before delivery.
+12. Preserve the Word source orientation. Never change portrait to landscape, or landscape to portrait, unless the user explicitly requests it or the reference Excel clearly proves the source was interpreted incorrectly.
+13. Do not add default fill colors. Use no fill for headers and body cells unless the Word source or reference Excel visibly uses fills.
+14. Do not add extra blank data rows below each detected project/table section. Keep row counts tight to the Word source and the closest corrected case.
+15. Use the smallest equal-width base-column grid that can represent the layout cleanly. Avoid 56/64-column grids for portrait one-page forms unless the source is truly extreme and the reference style supports that density.
+16. Avoid copying page-header artifacts, repeated organization names, or OCR/extraction noise into the Excel body. If a corrected case removes those top lines, keep the main business title and form fields only.
+17. Prefer file stability over pixel-perfect appearance when Word formatting is unusually complex.
+18. Run validation before delivery. If structural validation finds repair-risk issues, regenerate before returning the file.
 
 ## System architecture
 
@@ -40,7 +46,7 @@ This skill has four layers:
    SKILL.md and references/*.md define conversion policy and quality gates.
 
 2. Case library
-   examples/case-*/ may contain source.docx, ai-output.xlsx, corrected.xlsx, and notes.md.
+   examples/case-*/ may contain source.doc or source.docx, ai-output.xlsx, corrected.xlsx, and notes.md.
    The case library may be empty. Empty examples must not block conversion.
 
 3. Layout JSON
@@ -83,6 +89,10 @@ Use the Word file as the content source. Use the Excel file only as a style and 
 
 Search `examples/case-*` for relevant `notes.md` and `corrected.xlsx`. Prefer the closest case's corrected file as a layout-style reference, but do not copy unrelated business fields. Transfer only reusable layout principles.
 
+Current seeded case:
+
+- `examples/case-001-cjjkjl-a012-pathogen/` records the CJJK/JL-W-A012-2024 pathogenic bacteria/microbiology original-record conversion. It teaches: portrait source must remain portrait, one-page Word must stay one-page Excel, no default fills, no extra blank project rows, avoid redundant page-top organization text, and avoid overly dense 56/64-column grids for this A012-style one-page portrait form.
+
 ### If the examples directory is empty
 
 Continue normally. Use the built-in layout heuristics, `layout_plan.schema.json`, and references. Do not ask the user for examples unless the current Word file is too ambiguous to reconstruct.
@@ -114,7 +124,7 @@ Case folders follow this pattern:
 
 ```text
 examples/case-001/
-├── source.docx
+├── source.doc or source.docx
 ├── ai-output.xlsx
 ├── corrected.xlsx
 └── notes.md
@@ -251,7 +261,7 @@ Before final answer, verify:
 When a conversion is unsatisfactory, add a new case:
 
 ```text
-examples/case-###/source.docx       original Word file
+examples/case-###/source.doc or source.docx   original Word file
 examples/case-###/ai-output.xlsx    unsatisfactory AI result
 examples/case-###/corrected.xlsx    human-corrected target result
 examples/case-###/notes.md          what was wrong and how it was corrected

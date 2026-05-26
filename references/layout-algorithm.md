@@ -9,7 +9,7 @@ This skill uses equal-width base columns plus merged cells. This is the core tec
 | Few fields, no dense tables | 16–20 base columns |
 | Several field rows, normal tables | 24–32 base columns |
 | Many horizontal fields or multi-level headers | 32–48 base columns |
-| Dense record tables, narrow headers, many side-by-side fields | 48–64 base columns |
+| Dense record tables, narrow headers, many side-by-side fields | 40–56 base columns; use 56+ only for truly extreme layouts |
 
 Do not hard-code one column count for every document.
 
@@ -36,3 +36,12 @@ Apply borders to actual cell edges. Avoid all shape or drawing line objects.
 - Fit width to 1 page unless the Word template itself is wider than one page.
 - Use page breaks to match Word page count when known.
 - Prefer layout rebalance over extreme print scaling.
+
+
+## A012-style compact exception
+
+For one-page portrait microbiology original-record templates similar to `case-001-cjjkjl-a012-pathogen`, do **not** automatically escalate to 56/64 base columns just because some table headers are dense. Prefer 28–36 equal-width base columns, with merged cells for section titles and proportional spans for subcolumns. If the first-pass layout spills to a second print page, reduce blank rows and row heights before increasing column count or changing orientation.
+
+## No-fill default
+
+The default visual style is no cell fill. Header hierarchy should be expressed with bold text, alignment, row height, and borders. Use fill colors only when the Word source or the selected `corrected.xlsx` case visibly uses them.
